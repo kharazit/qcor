@@ -7,6 +7,7 @@ add_library(${LIBRARY_NAME} SHARED ${SRC})
 target_include_directories(${LIBRARY_NAME} PUBLIC .)
 
 target_link_libraries(${LIBRARY_NAME} PUBLIC xacc::xacc PUBLIC xacc::quantum_gate)
+target_link_libraries(${LIBRARY_NAME} PUBLIC xacc::xacc PUBLIC xacc::pauli)
 
 xacc_configure_library_rpath(${LIBRARY_NAME})
 

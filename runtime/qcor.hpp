@@ -10,6 +10,7 @@
 #include "Observable.hpp"
 #include "Optimizer.hpp"
 
+#include "PauliOperator.hpp"
 #include "qalloc"
 #include "xacc_internal_compiler.hpp"
 
@@ -19,6 +20,19 @@ using OptFunction = xacc::OptFunction;
 using HeterogeneousMap = xacc::HeterogeneousMap;
 using Observable = xacc::Observable;
 using Optimizer = xacc::Optimizer;
+using PauliOperator = xacc::quantum::PauliOperator;
+
+PauliOperator X(int idx){
+  return PauliOperator({{idx, "X"}});
+}
+
+PauliOperator Y(int idx){
+  return PauliOperator({{idx, "Y"}});
+}
+
+PauliOperator Z(int idx){
+  return PauliOperator({{idx, "Z"}});
+}
 
 class ResultsBuffer {
 public:
@@ -26,6 +40,8 @@ public:
   double opt_val;
   std::vector<double> opt_params;
 };
+
+
 
 using Handle = std::future<ResultsBuffer>;
 ResultsBuffer sync(Handle &handle) { return handle.get(); }
