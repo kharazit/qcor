@@ -10,6 +10,7 @@
 #include "Observable.hpp"
 #include "Optimizer.hpp"
 
+#include "Utils.hpp"
 #include "PauliOperator.hpp"
 #include "qalloc"
 #include "xacc_internal_compiler.hpp"
@@ -94,9 +95,13 @@ double observe(xacc::CompositeInstruction *program,
                std::shared_ptr<Observable> obs,
                xacc::internal_compiler::qreg &q);
 
+
 // Observe the kernel and return the measured kernels
 std::vector<std::shared_ptr<xacc::CompositeInstruction>>
 observe(std::shared_ptr<Observable> obs, xacc::CompositeInstruction *program);
+
+std::vector<std::shared_ptr<xacc::CompositeInstruction>>
+observe(std::shared_ptr<PauliOperator> &obs, xacc::CompositeInstruction *program);
 
 // Get the objective function from the service registry
 std::shared_ptr<ObjectiveFunction> get_objective(const char *type);

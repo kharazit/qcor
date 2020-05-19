@@ -1,7 +1,7 @@
 #include "qcor.hpp"
 
 #include "Optimizer.hpp"
-
+#include "Utils.hpp"
 #include "xacc.hpp"
 #include "xacc_quantum_gate_api.hpp"
 #include "xacc_service.hpp"
@@ -21,8 +21,34 @@ observe(std::shared_ptr<xacc::Observable> obs,
   return obs->observe(xacc::as_shared_ptr(program));
 }
 
+std::vector<std::shared_ptr<xacc::CompositeInstruction>>
+observe(std::shared_ptr<xacc::quantum::PauliOperator> obs,
+xacc::CompositeInstruction *program){
+  return obs->observe(xacc::as_shared_ptr(program));
+}
+
 double observe(xacc::CompositeInstruction *program,
                std::shared_ptr<xacc::Observable> obs,
+               xacc::internal_compiler::qreg &q) {
+  return [program, obs, &q]() {
+    // Observe the program
+    auto programs = __internal__::observe(obs, program);
+
+    std::vector<xacc::CompositeInstruction *> ptrs;
+    for (auto p : programs) {
+      ptrs.push_back(p.get());
+    }
+
+    xacc::internal_compiler::execute(q.results(), ptrs);
+
+    // We want to contract q children buffer
+    // exp-val-zs with obs term coeffs
+    return q.weighted_sum(obs.get());
+  }();
+}
+
+double observe(xacc::CompositeInstruction *program,
+               std::shared_ptr<xacc::quantum::PauliOperator> obs,
                xacc::internal_compiler::qreg &q) {
   return [program, obs, &q]() {
     // Observe the program
