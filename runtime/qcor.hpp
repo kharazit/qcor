@@ -10,10 +10,10 @@
 #include "Observable.hpp"
 #include "Optimizer.hpp"
 
-#include "Utils.hpp"
-#include "PauliOperator.hpp"
 #include "qalloc"
 #include "xacc_internal_compiler.hpp"
+
+#include "qrt.hpp"
 
 namespace qcor {
 
@@ -21,19 +21,6 @@ using OptFunction = xacc::OptFunction;
 using HeterogeneousMap = xacc::HeterogeneousMap;
 using Observable = xacc::Observable;
 using Optimizer = xacc::Optimizer;
-using PauliOperator = xacc::quantum::PauliOperator;
-
-PauliOperator X(int idx){
-  return PauliOperator({{idx, "X"}});
-}
-
-PauliOperator Y(int idx){
-  return PauliOperator({{idx, "Y"}});
-}
-
-PauliOperator Z(int idx){
-  return PauliOperator({{idx, "Z"}});
-}
 
 class ResultsBuffer {
 public:
@@ -41,8 +28,6 @@ public:
   double opt_val;
   std::vector<double> opt_params;
 };
-
-
 
 using Handle = std::future<ResultsBuffer>;
 ResultsBuffer sync(Handle &handle) { return handle.get(); }
@@ -87,7 +72,11 @@ xacc::CompositeInstruction *kernel_as_composite_instruction(QuantumKernel &k,
   k(args...);
   // turn execution on
   xacc::internal_compiler::__execute = true;
+#ifdef QCOR_USE_QRT
+  return quantum::getProgram().get();
+#else
   return xacc::internal_compiler::getLastCompiled();
+#endif
 }
 
 // Observe the given kernel, and return the expected value
@@ -95,13 +84,16 @@ double observe(xacc::CompositeInstruction *program,
                std::shared_ptr<Observable> obs,
                xacc::internal_compiler::qreg &q);
 
+double observe(xacc::CompositeInstruction *program,
+              Observable &obs,
+              xacc::internal_compiler::qreg &q);
 
 // Observe the kernel and return the measured kernels
 std::vector<std::shared_ptr<xacc::CompositeInstruction>>
 observe(std::shared_ptr<Observable> obs, xacc::CompositeInstruction *program);
 
 std::vector<std::shared_ptr<xacc::CompositeInstruction>>
-observe(std::shared_ptr<PauliOperator> &obs, xacc::CompositeInstruction *program);
+observe(Observable &obs, xacc::CompositeInstruction *program);
 
 // Get the objective function from the service registry
 std::shared_ptr<ObjectiveFunction> get_objective(const char *type);
@@ -192,7 +184,9 @@ public:
       qreg = std::get<0>(std::forward_as_tuple(args...));
     }
 
+#ifndef QCOR_USE_QRT
     kernel->updateRuntimeArguments(args...);
+#endif
     return operator()();
   }
 };
@@ -210,16 +204,50 @@ auto observe(QuantumKernel &kernel, std::shared_ptr<Observable> obs,
              Args... args) {
   auto program = __internal__::kernel_as_composite_instruction(kernel, args...);
   return [program, obs](Args... args) {
+      
     // Get the first argument, which should be a qreg
     auto q = std::get<0>(std::forward_as_tuple(args...));
     // std::cout << "\n" << program->toString() << "\n";
 
     // Set the arguments on the IR
+#ifndef QCOR_USE_QRT
     program->updateRuntimeArguments(args...);
+#endif
     // std::cout << "\n" << program->toString() << "\n";
 
     // Observe the program
     auto programs = __internal__::observe(obs, program);
+
+    std::vector<xacc::CompositeInstruction *> ptrs;
+    for (auto p : programs)
+      ptrs.push_back(p.get());
+
+    xacc::internal_compiler::execute(q.results(), ptrs);
+
+    // We want to contract q children buffer
+    // exp-val-zs with obs term coeffs
+    return q.weighted_sum(obs.get());
+  }(args...);
+}
+
+template <typename QuantumKernel, typename... Args>
+auto observe(QuantumKernel &kernel, Observable &obs,
+             Args... args) {
+  auto program = __internal__::kernel_as_composite_instruction(kernel, args...);
+  return [program, obs](Args... args) {
+      
+    // Get the first argument, which should be a qreg
+    auto q = std::get<0>(std::forward_as_tuple(args...));
+    // std::cout << "\n" << program->toString() << "\n";
+
+    // Set the arguments on the IR
+#ifndef QCOR_USE_QRT
+    program->updateRuntimeArguments(args...);
+#endif
+    // std::cout << "\n" << program->toString() << "\n";
+
+    // Observe the program
+    auto programs = obs.observe(program);
 
     std::vector<xacc::CompositeInstruction *> ptrs;
     for (auto p : programs)

@@ -1,8 +1,10 @@
 #include "token_collector_util.hpp"
 #include <iostream>
+#include <regex>
 #include <sstream>
 
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/Type.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Parse/Parser.h"
@@ -50,7 +52,7 @@ public:
     const DeclaratorChunk::FunctionTypeInfo &FTI = D.getFunctionTypeInfo();
     std::string kernel_name = D.getName().Identifier->getName().str();
     if (!FTI.Params) {
-      diagnostics.Report(D.getBeginLoc(), invalid_no_args);
+      //   diagnostics.Report(D.getBeginLoc(), invalid_no_args);
     }
 
     function_prototype = "(";
@@ -66,14 +68,17 @@ public:
 
       auto parm_var_decl = cast<ParmVarDecl>(decl);
       if (parm_var_decl) {
-        auto type = parm_var_decl->getType().getCanonicalType().getAsString();
+        auto type = QualType::getAsString(parm_var_decl->getType().split(),
+                                           PrintingPolicy{{}});
+                    // parm_var_decl->getType().getCanonicalType().getAsString();
         program_arg_types.push_back(type);
         program_parameters.push_back(ident->getName().str());
         if (type == "class xacc::internal_compiler::qreg") {
           bufferNames.push_back(ident->getName().str());
           function_prototype += "qreg " + ident->getName().str() + ", ";
         } else {
-          function_prototype += type + " " + ident->getName().str() + ", ";
+          function_prototype +=
+              type + " " + ident->getName().str() + ", ";
         }
       }
     }
@@ -81,29 +86,19 @@ public:
         "void " + kernel_name +
         function_prototype.substr(0, function_prototype.length() - 2) + ")";
 
-    // std::cout << "FPROTO: " << function_prototype << "\n";
-    // If we failed to get the name, then we fail
-    if (bufferNames.empty()) {
-      diagnostics.Report(D.getBeginLoc(), invalid_qreg_name);
-      exit(1);
-    }
-
     // Get Tokens as a string, rewrite code
     // with XACC api calls
-    auto kernel_src_and_compiler =
-        qcor::run_token_collector(PP, Toks, function_prototype);
-    auto kernel_src = kernel_src_and_compiler.first;
-    auto compiler_name = kernel_src_and_compiler.second;
 
     if (qrt) {
 
-      // call to the util function to use xacc to
-      // generate new code to the OS
-      qcor::map_xacc_kernel_to_qrt_calls(kernel_src, qpu_name, compiler_name,
-                                         kernel_name, bufferNames, OS,
-                                         (shots > 0 ? shots : 0));
+      qcor::run_token_collector_llvm_rt(PP, Toks, function_prototype,
+                                        bufferNames, kernel_name, OS, qpu_name);
 
     } else {
+      auto kernel_src_and_compiler =
+          qcor::run_token_collector(PP, Toks, function_prototype);
+      auto kernel_src = kernel_src_and_compiler.first;
+      auto compiler_name = kernel_src_and_compiler.second;
       // std::cout << "HELLO:\n" << kernel_src << "\n";
       // Write new source code in place of the
       // provided quantum code tokens

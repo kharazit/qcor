@@ -1,7 +1,7 @@
 #include "qcor.hpp"
 
 #include "Optimizer.hpp"
-#include "Utils.hpp"
+
 #include "xacc.hpp"
 #include "xacc_quantum_gate_api.hpp"
 #include "xacc_service.hpp"
@@ -18,12 +18,6 @@ std::shared_ptr<ObjectiveFunction> get_objective(const char *type) {
 std::vector<std::shared_ptr<xacc::CompositeInstruction>>
 observe(std::shared_ptr<xacc::Observable> obs,
         xacc::CompositeInstruction *program) {
-  return obs->observe(xacc::as_shared_ptr(program));
-}
-
-std::vector<std::shared_ptr<xacc::CompositeInstruction>>
-observe(std::shared_ptr<xacc::quantum::PauliOperator> obs,
-xacc::CompositeInstruction *program){
   return obs->observe(xacc::as_shared_ptr(program));
 }
 
@@ -48,11 +42,12 @@ double observe(xacc::CompositeInstruction *program,
 }
 
 double observe(xacc::CompositeInstruction *program,
-               std::shared_ptr<xacc::quantum::PauliOperator> obs,
+               Observable &obs,
                xacc::internal_compiler::qreg &q) {
   return [program, obs, &q]() {
     // Observe the program
-    auto programs = __internal__::observe(obs, program);
+
+    auto programs = obs.observe(xacc::as_shared_ptr(program));
 
     std::vector<xacc::CompositeInstruction *> ptrs;
     for (auto p : programs) {
