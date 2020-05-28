@@ -13,8 +13,10 @@
 #include "qalloc"
 #include "xacc_internal_compiler.hpp"
 #include "PauliOperator.hpp"
-
+#include "FermionOperator.hpp"
+#include "ObservableTransform.hpp"
 #include "qrt.hpp"
+
 
 namespace qcor {
 
@@ -24,47 +26,51 @@ using Observable = xacc::Observable;
 using Optimizer = xacc::Optimizer;
 using CompositeInstruction = xacc::CompositeInstruction;
 using PauliOperator = xacc::quantum::PauliOperator;
+using FermionOperator = xacc::quantum::FermionOperator;
 
 
 PauliOperator X(int idx){
   return PauliOperator({{idx, "X"}});
 }
-
 PauliOperator Y(int idx){
   return PauliOperator({{idx, "Y"}});
 }
-
 PauliOperator Z(int idx){
   return PauliOperator({{idx, "Z"}});
 }
-template<typename T>
-PauliOperator operator+(T coeff, PauliOperator &op){
-  return PauliOperator(coeff) + op;
-}
-template<typename T>
-PauliOperator operator+(PauliOperator &op, T coeff){
-  return PauliOperator(coeff) + op;
-}
-
-template<typename T>
-PauliOperator operator-(T coeff, PauliOperator &op){
-  return -1.0*coeff + op;
-}
-
-template<typename T>
-PauliOperator operator-(PauliOperator &op, T coeff){
-  return -1.0*coeff + op;
-}
-
 PauliOperator SP(int idx){
   std::complex<double> imag (0.0, 1.0);
   return X(idx) + imag * Y(idx);
 }
-
 PauliOperator SM(int idx){
   std::complex<double> imag (0.0, 1.0);
   return X(idx) - imag * Y(idx);
 }
+FermionOperator a(int idx){
+  std::string s("(1.0, 0) "+std::to_string(idx));
+  return FermionOperator(s);
+}
+FermionOperator adag(int idx){
+  std::string s("(1.0, 0) "+std::to_string(idx) +"^");
+  return FermionOperator(s);
+}
+template<typename T>
+PauliOperator operator+(T coeff, Observable &op){
+  return PauliOperator(coeff) + op;
+}
+template<typename T>
+PauliOperator operator+(Observable &op, T coeff){
+  return PauliOperator(coeff) + op;
+}
+template<typename T>
+PauliOperator operator-(T coeff, Observable &op){
+  return -1.0*coeff + op;
+}
+template<typename T>
+PauliOperator operator-(Observable &op, T coeff){
+  return -1.0*coeff + op;
+}
+
 
 class ResultsBuffer {
 public:
@@ -122,6 +128,10 @@ kernel_as_composite_instruction(QuantumKernel &k, Args... args) {
   return xacc::internal_compiler::getLastCompiled();
 #endif
 }
+
+//transform FermionOperator to PauliOperator
+std::shared_ptr<Observable> transform(Observable &obs, std::string transf = "JW");
+
 
 // Observe the given kernel, and return the expected value
 double observe(std::shared_ptr<CompositeInstruction> program,
