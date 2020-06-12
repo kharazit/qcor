@@ -25,4 +25,4 @@ if(APPLE)
     )
 endif(APPLE)
 
-install(TARGETS print_llvm_qir DESTINATION lib)
+install(TARGETS print_llvm_qir DESTINATION qopt-plugins)

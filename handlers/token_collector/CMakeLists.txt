@@ -5,7 +5,7 @@ add_library(${LIBRARY_NAME}
             token_collector_util.cpp)
 
 target_include_directories(${LIBRARY_NAME}
-                           PUBLIC .
+                           PUBLIC . ${CMAKE_SOURCE_DIR}/runtime/qrt
                                   ${CLANG_INCLUDE_DIRS}
                                   ${LLVM_INCLUDE_DIRS})
 
