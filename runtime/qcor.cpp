@@ -5,7 +5,6 @@
 #include "xacc.hpp"
 #include "xacc_quantum_gate_api.hpp"
 #include "xacc_service.hpp"
-
 #include "qalloc.hpp"
 #include "qrt.hpp"
 
@@ -55,7 +54,15 @@ double observe(std::shared_ptr<CompositeInstruction> program, Observable &obs,
 }
 } // namespace __internal__
 
-std::shared_ptr<xacc::Optimizer> createOptimizer(const std::string &type,
+std::shared_ptr<Observable> transform(Observable &obs, std::string transf){
+  if (transf != "jw"){
+    throw "transform: " + transf + " not defined! Using Jordan-Wigner (`jw`)";
+  }
+  auto obsv = xacc::as_shared_ptr(&obs);
+  return (*xacc::getService<xacc::ObservableTransform>("jw")).transform(obsv);
+}
+
+std::shared_ptr<xacc::Optimizer> createOptimizer(const char *type,
                                                  HeterogeneousMap &&options) {
   if (!xacc::isInitialized())
     xacc::internal_compiler::compiler_InitializeXACC();
