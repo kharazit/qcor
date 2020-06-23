@@ -62,40 +62,83 @@ PauliOperator allZs(const int nQubits) {
     return ret;
 }
 
-template<typename T>
+//transform FermionOperator to PauliOperator
+PauliOperator transform(FermionOperator& obs, std::string transf = "JW");
+
+
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 PauliOperator operator+(T coeff, PauliOperator &op){
   return PauliOperator(coeff) + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 PauliOperator operator+(PauliOperator &op, T coeff){
   return PauliOperator(coeff) + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 PauliOperator operator-(T coeff, PauliOperator &op){
   return -1.0*coeff + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 PauliOperator operator-(PauliOperator &op, T coeff){
   return -1.0*coeff + op;
 }
-
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 FermionOperator operator+(T coeff, FermionOperator &op){
   return FermionOperator(coeff) + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 FermionOperator operator+(FermionOperator &op, T coeff){
   return FermionOperator(coeff) + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 FermionOperator operator-(T coeff, FermionOperator &op){
   return -1.0*coeff + op;
 }
-template<typename T>
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
 FermionOperator operator-(FermionOperator &op, T coeff){
   return -1.0*coeff + op;
 }
 
+PauliOperator operator+(FermionOperator &&fop, PauliOperator &&pop){
+  auto pfop = transform(fop);
+  return pfop + pop;
+}
+
+PauliOperator operator+( PauliOperator &&pop, FermionOperator &&fop){
+  auto pfop = transform(fop);
+  return pop + pfop;
+}
+
+PauliOperator operator*( PauliOperator &&pop, FermionOperator &&fop){
+  auto pfop = transform(fop);
+  return pfop*pop;
+}
+
+PauliOperator operator*(FermionOperator &&fop,  PauliOperator &&pop){
+  auto pfop = transform(fop);
+  return pop*pfop;
+}
+
+
+PauliOperator operator+(FermionOperator &fop, PauliOperator &pop){
+  auto pfop = transform(fop);
+  return pfop + pop;
+}
+
+PauliOperator operator+( PauliOperator &pop, FermionOperator &fop){
+  auto pfop = transform(fop);
+  return pop + pfop;
+}
+
+PauliOperator operator*( PauliOperator &pop, FermionOperator &fop){
+  auto pfop = transform(fop);
+  return pfop*pop;
+}
+
+PauliOperator operator*(FermionOperator &fop,  PauliOperator &pop){
+  auto pfop = transform(fop);
+  return pop*pfop;
+}
 
 
 
@@ -158,8 +201,6 @@ kernel_as_composite_instruction(QuantumKernel &k, Args... args) {
 #endif
 }
 
-//transform FermionOperator to PauliOperator
-std::shared_ptr<Observable> transform(Observable &obs, std::string transf = "JW");
 
 
 // Observe the given kernel, and return the expected value
