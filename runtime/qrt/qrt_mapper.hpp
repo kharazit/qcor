@@ -6,6 +6,8 @@
 #include "Circuit.hpp"
 #include <Instruction.hpp>
 
+#include "qrt.hpp"
+
 namespace qcor {
 using namespace xacc::quantum;
 
@@ -50,7 +52,8 @@ public:
   // Ctor: cache the kernel name of the CompositeInstruction
   qrt_mapper(const std::string &top_level_kernel_name)
       : kernelName(top_level_kernel_name) {}
-
+  qrt_mapper() = default;
+  
   auto get_new_src() { return ss.str(); }
   // One-qubit gates
   void visit(Hadamard &h) override { addOneQubitGate("h", h); }
@@ -118,8 +121,7 @@ public:
       for (const auto &arg : circ.getArguments()) {
         if (arg->name.find("__xacc__literal_") != std::string::npos) {
           ss << ", " << arg->name << arg;
-          }
-        else {
+        } else {
           ss << ", " << arg->name;
         }
       }

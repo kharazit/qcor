@@ -1,6 +1,22 @@
 from qcor/deploy-base
 workdir /home/dev
-run cd /home/dev && git clone --recursive https://github.com/eclipse/xacc && cd xacc && mkdir build && cd build \
+run cd /home/dev && apt-get update && apt-get install -y uuid-dev pkg-config \
+    && git clone https://github.com/zeromq/libzmq \
+    && cd libzmq/ && mkdir build && cd build \
+    && cmake .. -DCMAKE_INSTALL_PREFIX=~/.zmq \
+    && make -j$(nproc) install \
+    && cd ../.. \
+    && git clone https://github.com/zeromq/cppzmq \
+    && cd cppzmq/ && mkdir build && cd build/ \
+    && cmake .. -DCMAKE_INSTALL_PREFIX=~/.zmq -DCMAKE_PREFIX_PATH=~/.zmq \
+    && make -j$(nproc) install \
+    && cd ../.. \
+    && git clone -b c_master https://github.com/msgpack/msgpack-c/ \
+    && cd msgpack-c/ && mkdir build && cd build \
+    && cmake .. -DCMAKE_INSTALL_PREFIX=~/.zmq \
+    && make -j$(nproc) install \
+    && cd ../.. \
+    && git clone --recursive https://github.com/eclipse/xacc && cd xacc && mkdir build && cd build \
     && cmake .. \
     && make -j$(nproc) install \
     && cd ../../ && git clone https://github.com/ornl-qci/tnqvm && cd tnqvm && mkdir build && cd build \
@@ -15,7 +31,9 @@ run cd /home/dev && git clone --recursive https://github.com/eclipse/xacc && cd 
     && cmake .. -DPETSC_DIR=${PETSC_DIR} -DPETSC_ARCH=linux-gnu-c-complex -DXACC_DIR=~/.xacc \
     && make install \
     && cd /home/dev && git clone https://github.com/ornl-qci/qcor && cd qcor && mkdir build && cd build \
-    && cmake .. && make -j$(nproc) install 
+    && cmake .. && make -j$(nproc) install \
+    && git clone https://github.com/rigetti/qcs-cli && cd qcs-cli \
+    && npm install && npm link
 
 # Theia application
 workdir /home/dev

@@ -1,6 +1,7 @@
 #ifndef RUNTIME_QCOR_HPP_
 #define RUNTIME_QCOR_HPP_
 
+#include <IRTransformation.hpp>
 #include <functional>
 #include <future>
 #include <memory>
@@ -188,17 +189,21 @@ template <typename Function, typename Tuple> auto call(Function f, Tuple t) {
 template <typename QuantumKernel, typename... Args>
 std::shared_ptr<CompositeInstruction>
 kernel_as_composite_instruction(QuantumKernel &k, Args... args) {
+  // #ifdef QCOR_USE_QRT
+  quantum::clearProgram();
+  // #endif
   // turn off execution
+  const auto cached_exec = xacc::internal_compiler::__execute;
   xacc::internal_compiler::__execute = false;
   // Execute to compile, this will store and we can get it
   k(args...);
   // turn execution on
-  xacc::internal_compiler::__execute = true;
-#ifdef QCOR_USE_QRT
+  xacc::internal_compiler::__execute = cached_exec;
+  // #ifdef QCOR_USE_QRT
   return quantum::getProgram();
-#else
-  return xacc::internal_compiler::getLastCompiled();
-#endif
+  // #else
+  //   return xacc::internal_compiler::getLastCompiled();
+  // #endif
 }
 
 
@@ -214,9 +219,20 @@ observe(std::shared_ptr<Observable> obs,
         std::shared_ptr<CompositeInstruction> program);
 
 // Get the objective function from the service registry
-std::shared_ptr<ObjectiveFunction> get_objective(const std::string & type);
+std::shared_ptr<ObjectiveFunction> get_objective(const std::string &type);
+std::shared_ptr<xacc::IRTransformation>
+get_transformation(const std::string &transform_type);
 
 } // namespace __internal__
+
+template <typename QuantumKernel, typename... Args>
+void print_kernel(std::ostream &os, QuantumKernel &kernel, Args... args) {
+  os << __internal__::kernel_as_composite_instruction(kernel, args...)
+            ->toString();
+  // #ifdef QCOR_USE_QRT
+  quantum::clearProgram();
+  // #endif
+}
 
 // The ObjectiveFunction represents a functor-like data structure that
 // models a general parameterized scalar function. It is initialized with a
@@ -247,6 +263,7 @@ protected:
 
   // The buffer containing all execution results
   xacc::internal_compiler::qreg qreg;
+  bool kernel_is_xacc_composite = false;
 
   HeterogeneousMap options;
 
@@ -271,6 +288,7 @@ public:
                           std::shared_ptr<CompositeInstruction> qk) {
     observable = obs;
     kernel = qk;
+    kernel_is_xacc_composite = true;
   }
 
   // Initialize this ObjectiveFunction with the problem
@@ -291,26 +309,22 @@ public:
   // quantum kernel
   template <typename... ArgumentTypes>
   double operator()(ArgumentTypes... args) {
-#ifdef QCOR_USE_QRT
-    auto functor =
-        reinterpret_cast<void (*)(ArgumentTypes...)>(pointer_to_functor);
-    kernel = __internal__::kernel_as_composite_instruction(functor, args...);
-#else
-    if (!kernel) {
-      auto functor =
+    void (*functor)(ArgumentTypes...);
+    if (pointer_to_functor) {
+      functor =
           reinterpret_cast<void (*)(ArgumentTypes...)>(pointer_to_functor);
-      kernel = __internal__::kernel_as_composite_instruction(functor, args...);
     }
-#endif
 
     if (!qreg.results()) {
       // this hasn't been set, so set it
       qreg = std::get<0>(std::forward_as_tuple(args...));
     }
 
-#ifndef QCOR_USE_QRT
-    kernel->updateRuntimeArguments(args...);
-#endif
+    if (kernel_is_xacc_composite) {
+      kernel->updateRuntimeArguments(args...);
+    } else {
+      kernel = __internal__::kernel_as_composite_instruction(functor, args...);
+    }
     return operator()();
   }
 };
@@ -331,11 +345,6 @@ auto observe(QuantumKernel &kernel, std::shared_ptr<Observable> obs,
     // Get the first argument, which should be a qreg
     auto q = std::get<0>(std::forward_as_tuple(args...));
 
-    // Set the arguments on the IR
-#ifndef QCOR_USE_QRT
-    program->updateRuntimeArguments(args...);
-#endif
-
     // Observe the program
     auto programs = obs->observe(program);
 
@@ -355,12 +364,6 @@ auto observe(QuantumKernel &kernel, Observable &obs,
 
     // Get the first argument, which should be a qreg
     auto q = std::get<0>(std::forward_as_tuple(args...));
-    // std::cout << "\n" << program->toString() << "\n";
-
-    // Set the arguments on the IR
-#ifndef QCOR_USE_QRT
-    program->updateRuntimeArguments(args...);
-#endif
 
     // Observe the program
     auto programs = obs.observe(program);
@@ -459,7 +462,6 @@ Handle taskInitiate(std::shared_ptr<ObjectiveFunction> objective,
       nParameters);
 }
 
-#ifdef QCOR_USE_QRT
 // Controlled-Op transform:
 // Usage: Controlled::Apply(controlBit, QuantumKernel, Args...)
 // where Args... are arguments that will be passed to the kernel.
@@ -478,7 +480,76 @@ public:
   __execute = __cached_execute_flag;
 }
 };
-#endif
+
+template <typename QuantumKernel, typename... Args>
+std::function<void(Args...)> measure_all(QuantumKernel &kernel, Args... args) {
+  return [&](Args... args) {
+    auto internal_kernel =
+        qcor::__internal__::kernel_as_composite_instruction(kernel, args...);
+    auto q = std::get<0>(std::forward_as_tuple(args...));
+    auto q_name = q.name();
+    auto nq = q.size();
+    auto observable = allZs(nq);
+    auto observed = observable.observe(internal_kernel)[0];
+    auto visitor = std::make_shared<xacc_to_qrt_mapper>(q_name);
+    quantum::clearProgram();
+    xacc::InstructionIterator iter(observed);
+    while (iter.hasNext()) {
+      auto next = iter.next();
+      if (!next->isComposite()) {
+        next->accept(visitor);
+      }
+    }
+    if (xacc::internal_compiler::__execute) {
+      ::quantum::submit(q.results());
+    }
+    return;
+  };
+}
+
+template <typename QuantumKernel, typename... Args>
+std::function<void(Args...)>
+apply_transformations(QuantumKernel &kernel,
+                      std::vector<std::string> &&transforms, Args... args) {
+  auto internal_kernel =
+      qcor::__internal__::kernel_as_composite_instruction(kernel, args...);
+
+  for (auto &transform : transforms) {
+
+    auto xacc_transform = qcor::__internal__::get_transformation(transform);
+    xacc_transform->apply(internal_kernel, xacc::internal_compiler::get_qpu());
+  }
+
+  return [internal_kernel](Args... args) {
+    // map back to executable kernel
+    quantum::clearProgram();
+    auto q = std::get<0>(std::forward_as_tuple(args...));
+    auto q_name = q.name();
+    auto visitor = std::make_shared<xacc_to_qrt_mapper>(q_name);
+    xacc::InstructionIterator iter(internal_kernel);
+    while (iter.hasNext()) {
+      auto next = iter.next();
+      if (!next->isComposite()) {
+        next->accept(visitor);
+      }
+    }
+    if (xacc::internal_compiler::__execute) {
+      ::quantum::submit(q.results());
+    }
+  };
+}
+
+template <typename QuantumKernel, typename... Args>
+const std::size_t n_instructions(QuantumKernel &kernel, Args... args) {
+  return qcor::__internal__::kernel_as_composite_instruction(kernel, args...)
+      ->nInstructions();
+}
+
+template <typename QuantumKernel, typename... Args>
+const std::size_t depth(QuantumKernel &kernel, Args... args) {
+  return qcor::__internal__::kernel_as_composite_instruction(kernel, args...)
+      ->depth();
+}
 } // namespace qcor
 
 #endif

@@ -17,16 +17,16 @@ void simplified_qrt_call_one_qbit(const char *gate_name,
   ::quantum::one_qubit_inst(gate_name, {buffer_name, idx});
 }
 
-void simplified_qrt_call_one_qbit_one_param(const char * gate_name,
-                                            const char * buffer_name,
+void simplified_qrt_call_one_qbit_one_param(const char *gate_name,
+                                            const char *buffer_name,
                                             const std::size_t idx,
                                             const double parameter) {
   ::quantum::one_qubit_inst(gate_name, {buffer_name, idx}, {parameter});
 }
 
-void simplified_qrt_call_two_qbits(const char * gate_name,
-                                   const char * buffer_name_1,
-                                   const char * buffer_name_2,
+void simplified_qrt_call_two_qbits(const char *gate_name,
+                                   const char *buffer_name_1,
+                                   const char *buffer_name_2,
                                    const std::size_t src_idx,
                                    const std::size_t tgt_idx) {
   ::quantum::two_qubit_inst(gate_name, {buffer_name_1, src_idx},
@@ -113,6 +113,12 @@ void two_qubit_inst(const std::string &name, const qubit &qidx1,
 
 void h(const qubit &qidx) { one_qubit_inst("H", qidx); }
 void x(const qubit &qidx) { one_qubit_inst("X", qidx); }
+void y(const qubit &qidx) { one_qubit_inst("Y", qidx); }
+void z(const qubit &qidx) { one_qubit_inst("Z", qidx); }
+
+void s(const qubit &qidx) { one_qubit_inst("S", qidx); }
+void sdg(const qubit &qidx) { one_qubit_inst("Sdg", qidx); }
+
 void t(const qubit &qidx) { one_qubit_inst("T", qidx); }
 void tdg(const qubit &qidx) { one_qubit_inst("Tdg", qidx); }
 
@@ -123,12 +129,18 @@ void rx(const qubit &qidx, const double theta) {
 void ry(const qubit &qidx, const double theta) {
   one_qubit_inst("Ry", qidx, {theta});
 }
+
 void rz(const qubit &qidx, const double theta) {
   one_qubit_inst("Rz", qidx, {theta});
 }
 
 void u1(const qubit &qidx, const double theta) {
   one_qubit_inst("U1", qidx, {theta});
+}
+
+void u3(const qubit &qidx, const double theta, const double phi,
+        const double lambda) {
+  one_qubit_inst("U", qidx, {theta, phi, lambda});
 }
 
 void mz(const qubit &qidx) { one_qubit_inst("Measure", qidx); }
@@ -159,6 +171,10 @@ void cphase(const qubit &src_idx, const qubit &tgt_idx, const double theta) {
 
 void crz(const qubit &src_idx, const qubit &tgt_idx, const double theta) {
   two_qubit_inst("CRZ", src_idx, tgt_idx, {theta});
+}
+
+void exp(qreg q, const double theta, xacc::Observable& H) {
+  exp(q, theta, xacc::as_shared_ptr(&H));
 }
 
 void exp(qreg q, const double theta, xacc::Observable *H) {
@@ -272,12 +288,10 @@ void submit(xacc::AcceleratorBuffer *buffer) {
 void submit(xacc::AcceleratorBuffer **buffers, const int nBuffers) {
   xacc::internal_compiler::execute(buffers, nBuffers, program);
 }
-std::shared_ptr<xacc::CompositeInstruction> getProgram() {
-  return program;
-}
-xacc::CompositeInstruction* program_raw_pointer() {return program.get();}
+std::shared_ptr<xacc::CompositeInstruction> getProgram() { return program; }
+xacc::CompositeInstruction *program_raw_pointer() { return program.get(); }
 void clearProgram() {
-  if (program && provider )
+  if (program && provider)
     program = provider->createComposite(program->name());
 }
 } // namespace quantum

@@ -2,12 +2,15 @@
 
 using namespace qcor;
 
+
 __qpu__ void ansatz(qreg q, double theta, std::shared_ptr<xacc::Observable> H){
     X(q[0]);
     X(q[1]);
 }
 
 int main(int argc, char **argv){
+    using qcor::X; //Due to ambiguous call with xacc::quantum::X
+
     auto q = qalloc(2);
 
     std::cout<<"Fermi op "<<std::endl;
@@ -34,7 +37,7 @@ int main(int argc, char **argv){
 
     std::cout << mixed_prod.toString() << std::endl;
 
-    auto H = X(0) + adag(0)*a(1) + adag(1)*a(0) + X(0)*adag(0)*adag(1);
+    auto H = X(0) + X(0)*a(1) + adag(1)*X(0) + X(0)*adag(0)*adag(1);
 
     std::cout<<"ARE WE HERE??"<<std::endl;
 
