@@ -11,11 +11,13 @@
 #include "Observable.hpp"
 #include "Optimizer.hpp"
 
-#include "PauliOperator.hpp"
 #include "qalloc"
 #include "xacc_internal_compiler.hpp"
-
+#include "PauliOperator.hpp"
+#include "FermionOperator.hpp"
+#include "ObservableTransform.hpp"
 #include "qrt.hpp"
+
 
 namespace qcor {
 
@@ -25,45 +27,122 @@ using Observable = xacc::Observable;
 using Optimizer = xacc::Optimizer;
 using CompositeInstruction = xacc::CompositeInstruction;
 using PauliOperator = xacc::quantum::PauliOperator;
+using FermionOperator = xacc::quantum::FermionOperator;
 
-PauliOperator X(int idx) { return PauliOperator({{idx, "X"}}); }
-
-PauliOperator Y(int idx) { return PauliOperator({{idx, "Y"}}); }
-
-PauliOperator Z(int idx) { return PauliOperator({{idx, "Z"}}); }
-
-PauliOperator allZs(const int nQubits) {
-  auto ret = Z(0);
-  for (int i = 1; i < nQubits; i++) {
-    ret *= Z(i);
-  }
-  return ret;
+PauliOperator X(int idx){
+  return PauliOperator({{idx, "X"}});
 }
-
-template <typename T> PauliOperator operator+(T coeff, PauliOperator &op) {
-  return PauliOperator(coeff) + op;
+PauliOperator Y(int idx){
+  return PauliOperator({{idx, "Y"}});
 }
-template <typename T> PauliOperator operator+(PauliOperator &op, T coeff) {
-  return PauliOperator(coeff) + op;
+PauliOperator Z(int idx){
+  return PauliOperator({{idx, "Z"}});
 }
-
-template <typename T> PauliOperator operator-(T coeff, PauliOperator &op) {
-  return -1.0 * coeff + op;
-}
-
-template <typename T> PauliOperator operator-(PauliOperator &op, T coeff) {
-  return -1.0 * coeff + op;
-}
-
-PauliOperator SP(int idx) {
-  std::complex<double> imag(0.0, 1.0);
+PauliOperator SP(int idx){
+  std::complex<double> imag (0.0, 1.0);
   return X(idx) + imag * Y(idx);
 }
-
-PauliOperator SM(int idx) {
-  std::complex<double> imag(0.0, 1.0);
+PauliOperator SM(int idx){
+  std::complex<double> imag (0.0, 1.0);
   return X(idx) - imag * Y(idx);
 }
+FermionOperator a(int idx){
+  std::string s("(1.0, 0) "+std::to_string(idx));
+  return FermionOperator(s);
+}
+FermionOperator adag(int idx){
+  std::string s("(1.0, 0) "+std::to_string(idx) +"^");
+  return FermionOperator(s);
+}
+
+PauliOperator allZs(const int nQubits) {
+    auto ret = Z(0);
+    for (int i = 1; i < nQubits; i++) {
+        ret *= Z(i);
+    }
+    return ret;
+}
+
+//transform FermionOperator to PauliOperator
+PauliOperator transform(FermionOperator& obs, std::string transf = "JW");
+
+
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator+(T coeff, PauliOperator &op){
+  return PauliOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator+(PauliOperator &op, T coeff){
+  return PauliOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator-(T coeff, PauliOperator &op){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator-(PauliOperator &op, T coeff){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator+(T coeff, FermionOperator &op){
+  return FermionOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator+(FermionOperator &op, T coeff){
+  return FermionOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator-(T coeff, FermionOperator &op){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator-(FermionOperator &op, T coeff){
+  return -1.0*coeff + op;
+}
+
+PauliOperator operator+(FermionOperator &&fop, PauliOperator &&pop){
+  auto pfop = transform(fop);
+  return pfop + pop;
+}
+
+PauliOperator operator+( PauliOperator &&pop, FermionOperator &&fop){
+  auto pfop = transform(fop);
+  return pop + pfop;
+}
+
+PauliOperator operator*( PauliOperator &&pop, FermionOperator &&fop){
+  auto pfop = transform(fop);
+  return pfop*pop;
+}
+
+PauliOperator operator*(FermionOperator &&fop,  PauliOperator &&pop){
+  auto pfop = transform(fop);
+  return pop*pfop;
+}
+
+
+PauliOperator operator+(FermionOperator &fop, PauliOperator &pop){
+  auto pfop = transform(fop);
+  return pfop + pop;
+}
+
+PauliOperator operator+( PauliOperator &pop, FermionOperator &fop){
+  auto pfop = transform(fop);
+  return pop + pfop;
+}
+
+PauliOperator operator*( PauliOperator &pop, FermionOperator &fop){
+  auto pfop = transform(fop);
+  return pfop*pop;
+}
+
+PauliOperator operator*(FermionOperator &fop,  PauliOperator &pop){
+  auto pfop = transform(fop);
+  return pop*pfop;
+}
+
+
+
 
 class ResultsBuffer {
 public:
@@ -127,6 +206,8 @@ kernel_as_composite_instruction(QuantumKernel &k, Args... args) {
   // #endif
 }
 
+
+
 // Observe the given kernel, and return the expected value
 double observe(std::shared_ptr<CompositeInstruction> program,
                std::shared_ptr<Observable> obs,
@@ -175,7 +256,7 @@ private:
 
 protected:
   // Pointer to the problem-specific Observable
-  Observable *observable;
+  Observable* observable;
 
   // Pointer to the quantum kernel
   std::shared_ptr<CompositeInstruction> kernel;
@@ -203,7 +284,7 @@ public:
 
   // Initialize this ObjectiveFunction with the problem
   // specific observable and CompositeInstruction
-  virtual void initialize(Observable *obs,
+  virtual void initialize(Observable* obs,
                           std::shared_ptr<CompositeInstruction> qk) {
     observable = obs;
     kernel = qk;
@@ -212,7 +293,7 @@ public:
 
   // Initialize this ObjectiveFunction with the problem
   // specific observable and pointer to quantum functor
-  virtual void initialize(Observable *obs, void *qk) {
+  virtual void initialize(Observable* obs, void *qk) {
     observable = obs;
     pointer_to_functor = qk;
   }
@@ -276,9 +357,11 @@ auto observe(QuantumKernel &kernel, std::shared_ptr<Observable> obs,
 }
 
 template <typename QuantumKernel, typename... Args>
-auto observe(QuantumKernel &kernel, Observable &obs, Args... args) {
+auto observe(QuantumKernel &kernel, Observable &obs,
+             Args... args) {
   auto program = __internal__::kernel_as_composite_instruction(kernel, args...);
   return [program, &obs](Args... args) {
+
     // Get the first argument, which should be a qreg
     auto q = std::get<0>(std::forward_as_tuple(args...));
 
@@ -295,23 +378,26 @@ auto observe(QuantumKernel &kernel, Observable &obs, Args... args) {
 
 // Create the desired Optimizer
 std::shared_ptr<xacc::Optimizer>
-createOptimizer(const std::string &type, HeterogeneousMap &&options = {});
+createOptimizer(const std::string& type, HeterogeneousMap &&options = {});
 
 // Create an observable from a string representation
-std::shared_ptr<Observable> createObservable(const std::string &repr);
+std::shared_ptr<Observable> createObservable(const std::string& repr);
 
 std::shared_ptr<ObjectiveFunction> createObjectiveFunction(
-    const std::string &obj_name, std::shared_ptr<CompositeInstruction> kernel,
-    std::shared_ptr<Observable> observable, HeterogeneousMap &&options = {}) {
-  auto obj_func = qcor::__internal__::get_objective(obj_name);
-  obj_func->initialize(observable.get(), kernel);
-  obj_func->set_options(options);
+    const std::string & obj_name, std::shared_ptr<CompositeInstruction> kernel,
+    std::shared_ptr<Observable> observable, HeterogeneousMap &&options = {}) 
+    {
+      std::cout<<"shared_ptr OBSERVABLE CALLED"<<std::endl;
+      auto obj_func = qcor::__internal__::get_objective(obj_name);
+      obj_func->initialize(observable.get(), kernel);
+      obj_func->set_options(options);
   return obj_func;
 }
 
 std::shared_ptr<ObjectiveFunction> createObjectiveFunction(
-    const std::string &obj_name, std::shared_ptr<CompositeInstruction> kernel,
-    Observable &observable, HeterogeneousMap &&options = {}) {
+    const std::string & obj_name, std::shared_ptr<CompositeInstruction> kernel,
+    Observable& observable, HeterogeneousMap &&options = {}) {
+  std::cout<<"OBSERVABLE& CALLED"<<std::endl;
   auto obj_func = qcor::__internal__::get_objective(obj_name);
   obj_func->initialize(&observable, kernel);
   obj_func->set_options(options);
@@ -324,7 +410,7 @@ std::shared_ptr<ObjectiveFunction> createObjectiveFunction(
 // options map.
 template <typename QuantumKernel>
 std::shared_ptr<ObjectiveFunction>
-createObjectiveFunction(const std::string &obj_name, QuantumKernel &kernel,
+createObjectiveFunction(const std::string & obj_name, QuantumKernel &kernel,
                         std::shared_ptr<Observable> observable,
                         HeterogeneousMap &&options = {}) {
   auto obj_func = qcor::__internal__::get_objective(obj_name);
@@ -338,8 +424,8 @@ createObjectiveFunction(const std::string &obj_name, QuantumKernel &kernel,
 
 template <typename QuantumKernel>
 std::shared_ptr<ObjectiveFunction>
-createObjectiveFunction(const std::string &obj_name, QuantumKernel &kernel,
-                        Observable &observable,
+createObjectiveFunction(const std::string & obj_name, QuantumKernel &kernel,
+                        Observable& observable,
                         HeterogeneousMap &&options = {}) {
   auto obj_func = qcor::__internal__::get_objective(obj_name);
   // We can store this function pointer to a void* on ObjectiveFunction
@@ -380,19 +466,19 @@ Handle taskInitiate(std::shared_ptr<ObjectiveFunction> objective,
 // Usage: Controlled::Apply(controlBit, QuantumKernel, Args...)
 // where Args... are arguments that will be passed to the kernel.
 // Note: we use a class with a static member function to enforce
-// that the invocation is Controlled::Apply(...) (with the '::' separator),
+// that the invocation is Controlled::Apply(...) (with the '::' separator), 
 // hence the XASM compiler cannot mistakenly parse this as a XASM call.
 class Controlled {
 public:
   template <typename FunctorType, typename... ArgumentTypes>
   static void Apply(int ctrlIdx, FunctorType functor, ArgumentTypes... args) {
-    __controlledIdx = {ctrlIdx};
-    const auto __cached_execute_flag = __execute;
-    __execute = false;
-    functor(args...);
-    __controlledIdx.clear();
-    __execute = __cached_execute_flag;
-  }
+  __controlledIdx = { ctrlIdx };
+  const auto __cached_execute_flag = __execute;
+  __execute = false;
+  functor(args...);
+  __controlledIdx.clear();
+  __execute = __cached_execute_flag;
+}
 };
 
 template <typename QuantumKernel, typename... Args>
