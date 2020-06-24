@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+import argparse, sys, os, subprocess, mimetypes, re
+
+def main(argv=None):
+    compiler = '@CLANG_EXECUTABLE@'
+    verbose=False
+    baseLibs = ['-rdynamic', '-Wl,-rpath,@CMAKE_INSTALL_PREFIX@/lib',
+                            '-L', '@CMAKE_INSTALL_PREFIX@/lib', '-lxacc',
+                            '-lqcor', '-lqrt', '-lCppMicroServices',
+                            '-lxacc-quantum-gate',
+                            '-lxacc-pauli', '-lpthread', '-lxacc-fermion']
+    baseIncludes = ['-I', '@CMAKE_INSTALL_PREFIX@/include/xacc', '-I', '@CMAKE_INSTALL_PREFIX@/include/qcor', '-I', '@CMAKE_INSTALL_PREFIX@/include/quantum/gate']
+    defaultFlags = ['-std=c++17', '-fplugin=@CMAKE_INSTALL_PREFIX@/clang-plugins/libqcor-syntax-handler.so']
+
+    # Need to know if this is compile-only
+    compileOnly = '-c' in sys.argv[1:]
+
+    if '-h' in sys.argv[1:] or '--help' in sys.argv[1:]:
+        import argparse
+        parser = argparse.ArgumentParser(description="qcor: the quantum-classical C++ compiler",
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     fromfile_prefix_chars='@')
+        parser.add_argument('-v', metavar='',
+                        help='turn on qcor verbose mode - prints actual clang calls plus extra info while compiling.')
+        parser.add_argument('-qpu', metavar=('name[:backend]'), help='specify quantum backend name. this corresponds to the name of an xacc accelerator (plus optional backend name).\nExamples include qcs:Aspen-4-2Q-H, ibm:ibmq_valencia, tnqvm, etc.')
+        parser.add_argument('-shots', metavar=('n_shots'), nargs=1,help='provide the number of shots to execute on shot-enabled backend.')
+        parser.add_argument('-c', metavar=('file.cpp'), help='specify compile-only, no library linking.\n$ qcor -c src.cpp [outputs src.o for future linking]\n')
+        parser.add_argument('-o', metavar=('object.o'), help='provide the name of the object file (if compile only) or executable (if compile and link or just link).\n$ qcor -o out.o -c src.cpp\n$ qcor -o out.exe src.cpp\n')
+        parser.add_argument('file', help='you must specify the c++ source file name to compile.')
+        parser.add_argument('-I',action='append',nargs=1, metavar=('header_file.hpp'),help='specify additional headers to add to the include search path.')
+        parser.add_argument('-L',action='append',nargs=1,metavar=('/path/to/libs'),help='specifiy additional linker search paths.')
+        parser.add_argument('-l',action='append',nargs=1,metavar=('lib_name'),help='specifiy additional libraries to link.')
+        args = parser.parse_args(sys.argv)
+
+
+    if '--verbose' in sys.argv[1:]:
+        verbose=True
+        sys.argv.remove('--verbose')
+    if '-v' in sys.argv[1:]:
+        verbose=True
+        sys.argv.remove('-v')
+
+    sHandlerArgs = []
+    # Get the QPU Backend
+    accName = ''
+    if '-qpu' in sys.argv[1:]:
+        accidx = sys.argv.index('-qpu')
+        accName = sys.argv[accidx+1]
+        sys.argv.remove(accName)
+        sys.argv.remove('-qpu')
+        sHandlerArgs = ['-Xclang', '-plugin-arg-qcor-args', '-Xclang', '-qpu', '-Xclang', '-plugin-arg-qcor-args', '-Xclang', accName]
+
+    # Get the shots if necessary
+    shots = 0
+    if '-shots' in sys.argv[1:]:
+        sidx = sys.argv.index('-shots')
+        shots = sys.argv[sidx+1]
+        sys.argv.remove(shots)
+        sys.argv.remove('-shots')
+        sHandlerArgs += ['-Xclang', '-plugin-arg-qcor-args', '-Xclang', '-shots', '-Xclang', '-plugin-arg-qcor-args', '-Xclang', shots]
+
+    if verbose:
+        sHandlerArgs += ['-Xclang', '-plugin-arg-qcor-args', '-Xclang', '-qcor-verbose']
+
+    if '-print-qir' in sys.argv[1:]:
+        sys.argv.remove('-print-qir')
+        sHandlerArgs += ['-Xclang', '-load', '-Xclang', '@CMAKE_INSTALL_PREFIX@/qopt-plugins/libprint_llvm_qir.so']
+
+    # Get the filename we are compiling or the object file
+    filename = ''
+    fileType = ''
+    for arg in sys.argv[1:]:
+        if os.path.isfile(arg) and mimetypes.guess_type(arg)[0] is not None:
+            filename = arg
+            fileType = mimetypes.guess_type(filename)[0]
+            break
+
+    # If it is a C++ file
+    if fileType == 'text/x-c++src':
+        fileIdx = sys.argv[1:].index(filename)
+        tmpFileName = os.path.basename(filename)
+
+        # Move tmpFileName to end of list
+        sys.argv.remove(filename)
+        sys.argv.append(filename)
+
+        sys.argv[0] = compiler
+        commands = [compiler] + defaultFlags + sHandlerArgs + baseIncludes
+        if compileOnly:
+            commands += sys.argv[1:]
+        else:
+            commands += baseLibs + sys.argv[1:]
+
+
+        if verbose:
+            print('[qcor-exec]: ', ' '.join([c for c in commands]))
+
+        try:
+            result = subprocess.run(commands, check=True)
+        except subprocess.CalledProcessError as e:
+            print(e.output)
+            print(e.returncode)
+            return e.returncode
+    elif fileType == '' and filename == '':
+        if '-x' in sys.argv[1:] and 'c++' in sys.argv[1:]:
+            sys.argv[0] = compiler
+            commands = [compiler] + defaultFlags + sHandlerArgs + baseIncludes 
+            if compileOnly:
+                commands += sys.argv[1:]
+            else:
+                commands += baseLibs + sys.argv[1:]
+
+
+            if verbose:
+                print('[qcor-exec]: ', ' '.join([c for c in commands]))
+
+            try:
+                result = subprocess.run(commands, check=True)
+            except subprocess.CalledProcessError as e:
+                print(e.output)
+                print(e.returncode)
+                return e.returncode
+        else:
+            print('invalid command line arguments for qcor')
+            exit(1)
+    else:
+        # This is a .o file, so execute the link phase
+        commands = [compiler] + baseLibs + sys.argv[1:]
+        if verbose:
+            print('[qcor-exec]: ', ' '.join([c for c in commands]))
+        try:
+            result = subprocess.run(commands, check=True)
+        except subprocess.CalledProcessError as e:
+            print(e.output)
+            print(e.returncode)
+            return e.returncode
+
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
