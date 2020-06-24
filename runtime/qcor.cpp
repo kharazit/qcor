@@ -63,8 +63,8 @@ double observe(std::shared_ptr<CompositeInstruction> program, Observable &obs,
 
 PauliOperator transform(FermionOperator &obs, std::string transf){
   xacc::Initialize();
-  if (transf != "JW"){
-    std::cout<< "transform: " + transf + " not defined! Using Jordan-Wigner (`JW`)\n";
+  if (transf != "jw"){
+    std::cout<< "transform: " + transf + " not defined! Using Jordan-Wigner (`jw`)\n";
   }
   auto obsv = xacc::as_shared_ptr(&obs);
   auto terms = std::dynamic_pointer_cast<PauliOperator>(

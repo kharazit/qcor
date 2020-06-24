@@ -64,7 +64,7 @@ PauliOperator allZs(const int nQubits) {
 }
 
 //transform FermionOperator to PauliOperator
-PauliOperator transform(FermionOperator& obs, std::string transf = "JW");
+PauliOperator transform(FermionOperator& obs, std::string transf = "jw");
 
 
 template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
@@ -100,6 +100,39 @@ FermionOperator operator-(FermionOperator &op, T coeff){
   return -1.0*coeff + op;
 }
 
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator+(T coeff, PauliOperator &&op){
+  return PauliOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator+(PauliOperator &&op, T coeff){
+  return PauliOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator-(T coeff, PauliOperator &&op){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+PauliOperator operator-(PauliOperator &&op, T coeff){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator+(T coeff, FermionOperator &&op){
+  return FermionOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator+(FermionOperator &&op, T coeff){
+  return FermionOperator(coeff) + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator-(T coeff, FermionOperator &&op){
+  return -1.0*coeff + op;
+}
+template<typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value, T>::type>
+FermionOperator operator-(FermionOperator &&op, T coeff){
+  return -1.0*coeff + op;
+}
+
 PauliOperator operator+(FermionOperator &&fop, PauliOperator &&pop){
   auto pfop = transform(fop);
   return pfop + pop;
@@ -119,7 +152,6 @@ PauliOperator operator*(FermionOperator &&fop,  PauliOperator &&pop){
   auto pfop = transform(fop);
   return pop*pfop;
 }
-
 
 PauliOperator operator+(FermionOperator &fop, PauliOperator &pop){
   auto pfop = transform(fop);
@@ -383,6 +415,7 @@ createOptimizer(const std::string& type, HeterogeneousMap &&options = {});
 // Create an observable from a string representation
 std::shared_ptr<Observable> createObservable(const std::string& repr);
 
+std::shared_ptr<Observable> createObservable(const std::string& type, const std::string& repr);
 std::shared_ptr<ObjectiveFunction> createObjectiveFunction(
     const std::string & obj_name, std::shared_ptr<CompositeInstruction> kernel,
     std::shared_ptr<Observable> observable, HeterogeneousMap &&options = {}) 
