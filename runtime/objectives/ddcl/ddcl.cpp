@@ -20,6 +20,7 @@ public:
     std::shared_ptr<xacc::Algorithm> ddcl;
     double operator()(xacc::internal_compiler::qreg &qreg,
                         std::vector<double> &dx) override {
+        std::cout<<"did we get here??\n";
         if(!ddcl){
             ddcl = xacc::getAlgorithm("ddcl");
         }
@@ -31,41 +32,29 @@ public:
         else{
             xacc::error("no target distrbution recieved!\n");
         }
+        std::cout<<"target distribution:\n";
+        for(auto &x:target_dist){
+            std::cout<<x<<" ";
+        }
+        std::cout<<"\n";
         auto qpu = xacc::internal_compiler::get_qpu();
         auto success = ddcl->initialize(
             {{"ansatz", kernel}, {"accelerator", qpu}, {"target-dist", target_dist}});
         if(!success){
             xacc::error("QCOR DDCL Error - could not initialize internal xacc ddcl algorithm.");
         }
+        std::cout<<"algorithm initialized!\n";
         auto tmp_child = qalloc(qreg.size());
         auto val = ddcl->execute(xacc::as_shared_ptr(tmp_child.results()), {})[0];
+        std::cout<<"Algorithm Executed!\n";
         for(auto &child : tmp_child.results()->getChildren()){
             child->addExtraInfo("parameters", current_iterate_parameters);
             auto tmp = current_iterate_parameters;
             tmp.push_back(val);
             child->addExtraInfo("qcor-params-loss", tmp);
         }
+        std::cout<<"children gotten!\n";
         qreg.addChild(tmp_child);
-
-        if(!dx.empty() && options.stringExists("gradient-strategy")){
-            //compute gradient
-            auto gradient_strategy = xacc::getService<xacc::AlgorithmGradientStrategy>
-            (options.getString("gradient-strategy"));
-
-            if(gradient_strategy->isNumerical()){
-                gradient_strategy->setFunctionValue
-                (val - std::real(observable->getIdentitySubTerm()->coefficient()));
-            }
-
-        gradient_strategy->initialize(options);
-        auto grad_kernels = gradient_strategy->getGradientExecutions(
-                            kernel, current_iterate_parameters);
-
-        auto tmp_grad = qalloc(qreg.size());
-        qpu->execute(xacc::as_shared_ptr(tmp_grad.results()), grad_kernels);
-        auto tmp_grad_children = tmp_grad.results()->getChildren();
-        gradient_strategy->compute(dx, tmp_grad_children);
-        }
     return val;
     }
     public:
@@ -80,7 +69,7 @@ namespace {
         DDCLObjectiveActivator() {}
 
         void Start(BundleContext context){
-            auto xt = std::make_shared<qcor::VQEObjective>();
+            auto xt = std::make_shared<qcor::DDCLObjective>();
             context.RegisterService<qcor::ObjectiveFunction>(xt);
         }
 
